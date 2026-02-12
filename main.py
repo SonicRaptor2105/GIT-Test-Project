@@ -15,11 +15,14 @@ def createGit():
 def blobFile(f):
     data = f.read()
     header = f"BLOB {len(data)}\0".encode('utf-8')
+    dataType = 0 #Initialise one Byte for file type
+    dataType = 2 if os.access(f.name, os.X_OK) else 1
+    print(dataType)
     finalData = zlib.compress(header + data)
     finalHash = hashlib.sha1(finalData).hexdigest()
     os.makedirs(f"{os.curdir}/.xgit/{finalHash[:2]}", exist_ok=True)
     with open(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}", 'wb') as blob: blob.write(finalData)
-    return finalHash
+    return (dataType, finalHash, f.name) #Returns data needed for a tree
 
 def createIgnoreFile():
     ignoreList = [".xgit", ".git"] #Default ignored files
@@ -36,9 +39,13 @@ def makeTrees(directory):
                     blobs.append(blobFile(fileObj))
             elif file.is_dir() and not file.name in ignoreList:
                 print(f"folder {file.name}")
-                makeTrees(file.path)
-    print(blobs)
-    return
+                blobs.append(makeTrees(file.path))
+    finalTree = str()
+    for x in blobs:
+        finalTree += " ".join(map(str, x))
+    finalTree = ("\x00".join(finalTree)).encode("utf-8")
+    print(finalTree.decode("utf-8"))
+    return directory
 
 
 
