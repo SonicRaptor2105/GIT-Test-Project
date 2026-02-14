@@ -16,7 +16,7 @@ def blobFile(f):
     data = f.read()
     header = f"BLOB {len(data)}\0".encode('utf-8')
     dataType = 0 #Initialise one Byte for file type
-    dataType = 2 if os.access(f.name, os.X_OK) else 1
+    dataType = 2 if os.access(f.name, os.X_OK) else 1 #Set to 2 if its executable else set to 1
     print(dataType)
     finalData = zlib.compress(header + data)
     finalHash = hashlib.sha1(finalData).hexdigest()
@@ -40,12 +40,22 @@ def makeTrees(directory):
             elif file.is_dir() and not file.name in ignoreList:
                 print(f"folder {file.name}")
                 blobs.append(makeTrees(file.path))
-    finalTree = str()
+    finalTree = list()
     for x in blobs:
-        finalTree += " ".join(map(str, x))
-    finalTree = ("\x00".join(finalTree)).encode("utf-8")
-    print(finalTree.decode("utf-8"))
-    return directory
+        finalTree.append(" ".join(map(str, x)))
+    finalTreeConcat = ("\x00".join((finalTree))).encode("utf-8")
+    header = f"TREE {len(finalTreeConcat)}\0".encode("utf-8")
+    print(finalTreeConcat.decode("utf-8"))
+    finalData = zlib.compress(header + finalTreeConcat)
+    finalHash = hashlib.sha1(finalData).hexdigest()
+    os.makedirs(f"{os.curdir}/.xgit/{finalHash[:2]}", exist_ok=True)
+    with open(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}", 'wb') as treeData: treeData.write(finalData)
+    try:
+        fileName = directory.rsplit("\\", 1)[1]
+        print(fileName)
+    except: #Parent directory
+        fileName = "."
+    return (10, finalHash, fileName) #Returns data needed for a tree to link to a new tree
 
 
 
