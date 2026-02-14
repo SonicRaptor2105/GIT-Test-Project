@@ -18,10 +18,7 @@ def blobFile(f):
     dataType = 0 #Initialise one Byte for file type
     dataType = 2 if os.access(f.name, os.X_OK) else 1 #Set to 2 if its executable else set to 1
     print(dataType)
-    finalData = zlib.compress(header + data)
-    finalHash = hashlib.sha1(finalData).hexdigest()
-    os.makedirs(f"{os.curdir}/.xgit/{finalHash[:2]}", exist_ok=True)
-    with open(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}", 'wb') as blob: blob.write(finalData)
+    finalHash = compressSave(header, data)
     return (dataType, finalHash, f.name) #Returns data needed for a tree
 
 def createIgnoreFile():
@@ -45,11 +42,8 @@ def makeTrees(directory):
         finalTree.append(" ".join(map(str, x)))
     finalTreeConcat = ("\x00".join((finalTree))).encode("utf-8")
     header = f"TREE {len(finalTreeConcat)}\0".encode("utf-8")
+    finalHash = compressSave(header, finalTreeConcat)
     print(finalTreeConcat.decode("utf-8"))
-    finalData = zlib.compress(header + finalTreeConcat)
-    finalHash = hashlib.sha1(finalData).hexdigest()
-    os.makedirs(f"{os.curdir}/.xgit/{finalHash[:2]}", exist_ok=True)
-    with open(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}", 'wb') as treeData: treeData.write(finalData)
     try:
         fileName = directory.rsplit("\\", 1)[1]
         print(fileName)
@@ -57,6 +51,12 @@ def makeTrees(directory):
         fileName = "."
     return (10, finalHash, fileName) #Returns data needed for a tree to link to a new tree
 
+def compressSave(header, finalBlob):
+    finalData = zlib.compress(header + finalBlob)
+    finalHash = hashlib.sha1(finalData).hexdigest()
+    os.makedirs(f"{os.curdir}/.xgit/{finalHash[:2]}", exist_ok=True)
+    with open(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}", 'wb') as treeData: treeData.write(finalData)
+    return finalHash
 
 
 createGit()
