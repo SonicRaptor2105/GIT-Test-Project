@@ -58,6 +58,10 @@ def compressSave(header, finalBlob):
     with open(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}", 'wb') as treeData: treeData.write(finalData)
     return finalHash
 
+def makeCommit(treeHash, author, comment):
+    pass
+
+
 
 createGit()
 ignoreList = list()
