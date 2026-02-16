@@ -2,6 +2,7 @@ import os
 import ctypes
 import hashlib
 import zlib
+from datetime import datetime, timezone
 
 def createGit():
     directory = f"{os.curdir}/.xgit"
@@ -55,11 +56,25 @@ def compressSave(header, finalBlob):
     finalData = zlib.compress(header + finalBlob)
     finalHash = hashlib.sha1(finalData).hexdigest()
     os.makedirs(f"{os.curdir}/.xgit/{finalHash[:2]}", exist_ok=True)
-    with open(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}", 'wb') as treeData: treeData.write(finalData)
+    if not os.path.exists(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}"):
+        with open(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}", 'wb') as treeData: treeData.write(finalData)
     return finalHash
 
+#WIP
 def makeCommit(treeHash, author, comment):
-    pass
+    previousCommit = str()
+    data = "\n".join([previousCommit, treeHash, author, datetime.now(timezone.utc).strftime("%d/%m/%y %H:%M+00:00"), comment]).encode("utf-8")
+    header = f"COMM {len(data)}\0".encode("utf-8")
+    compressSave(header, data)
+
+def checkLatestCommit():
+    if not os.path.exists(f"{os.curdir}/.xgit"):
+        return #First commit
+    with os.scandir(f"{os.curdir}/.xgit/") as folders:
+        if folders.is_dir():
+            for f in folders: #Checking the contents of each hash folder
+                with open(f) as d:
+                    if d.readlines.decode("utf-8"):
 
 
 
@@ -72,4 +87,5 @@ except OSError:
     print(" - Regenerating ignore.dat")
     ignoreList = createIgnoreFile()
 
-makeTrees(os.curdir)
+makeCommit('abc', 'x', 'Test Commit')
+#makeTrees(os.curdir)
