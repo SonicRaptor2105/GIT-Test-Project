@@ -106,12 +106,12 @@ def orderCommitList(commits): #WIP Needs error checking still
 
     while len(commits) > 0: #Continue until all commits have been sorted
         for d in commits[:]:
-            if currentHash == list(d.values())[0]:
+            if currentHash == list(d.values())[0]: #If the current hash is equal to the prior hash then the selected hash becomes the current hash
                 currentHash = list(d.keys())[0]
                 finalOrder.insert(0, currentHash)
                 commits.remove(d)
                 break
-    return(finalOrder)
+    return(finalOrder) #Returns a list of hashes that correlate to commit files, in order of newest to oldest
 
 def splitContent(hash):
     with open(f"{os.curdir}/.xgit/{hash[:2]}/{hash}", "rb") as f: d = f.read()
@@ -137,16 +137,9 @@ def unpackTree(treeHash, folderName = None):
             unpackTree(file[1], f"{f"{folderName}/" if folderName != None else ""}{file[2]}") #Unpack the subfolder if it exists while accounting for already being in a subfolder
         else:
             os.makedirs(f"{os.curdir}/.xgit/TEST{f"/{folderName}" if folderName != None else ""}", exist_ok=True)
-            #Fails if there is no file in the folder
-            if file != [""]: #If theres data in the folder
+            if file != [""]: #If theres data in the folder create it otherwise skip
                 _, blobData = splitContent(file[1]) #Take only the blob contnet and leave the header
                 with open(f"{os.curdir}/.xgit/TEST/{f"{folderName}/" if folderName != None else ""}{file[2]}", "wb") as f: f.write(blobData.encode("utf-8"))
-            
-
-                
-
-
-
 
 
 
