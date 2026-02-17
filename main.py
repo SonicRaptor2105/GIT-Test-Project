@@ -19,9 +19,13 @@ def blobFile(f):
     dataType = 0
     dataType = 2 if os.access(f.name, os.X_OK) else 1 #Set to 2 if its executable else set to 1
     finalHash = compressSave(header, data)
-    return (dataType, finalHash, f.name) #Returns data needed for a tree
+    return (dataType, finalHash, os.path.basename(f.name)) #Returns data needed for a tree
 
 def createIgnoreFile():
+    try:
+        with open(f"{os.curdir}/.xgit/ignore.dat", 'r') as f: ignoreList = f.read().split("\n") #Check if the ignore.dat file exists
+    except OSError:
+        print(" - Regenerating ignore.dat")
     ignoreList = [".xgit", ".git"] #Default ignored files
     with open(f"{os.curdir}/.xgit/ignore.dat", 'w') as f: f.write('\n'.join(ignoreList))
     return ignoreList
@@ -109,29 +113,34 @@ def orderCommitList(commits): #WIP Needs error checking still
                 break
     return(finalOrder)
 
+def splitContent(hash):
+    with open(f"{os.curdir}/.xgit/{hash[:2]}/{hash}", "rb") as f: d = f.read()
+    header, rawData = (zlib.decompress(d)).split(b"\0", 1) #Split the file into header and data
+    return header.decode('utf-8'), rawData.decode("utf-8") #Return both header and content decoded
+
 def readCommit(commit):
     path = f"{os.curdir}/.xgit/{commit[:2]}/{commit}"
     if os.path.exists(path):
-        with open(f"{os.curdir}/.xgit/{commit[:2]}/{commit}", "rb") as f: d = f.read()
-        header, rawData = (zlib.decompress(d)).split(b"\0") #Split the file into header and data
+        _, rawData = splitContent(commit) #Take the data and ignore the header
         keys = ["PreviousCommitHash", "TreeHash", "Author", "DateTime", "Comment"]
-        data = rawData.decode("utf-8").split(" ", 4)
+        data = rawData.split(" ", 4)
         commitUnpacked = dict(zip(keys, data)) #Pack the data into a more human readable dict form
         return(commitUnpacked)
     return
 
+def unpackTree(treeHash):
+    _, rawData = splitContent(treeHash) #Take only the tree content and ignore the header
+    rawData = rawData.split("\x00")
+    print(rawData)
+
+
 
 
 createGit()
-ignoreList = list()
-try:
-    with open(f"{os.curdir}/.xgit/ignore.dat", 'r') as f: ignoreList = f.read().split("\n")
-except OSError:
-    print(" - Regenerating ignore.dat")
-    ignoreList = createIgnoreFile()
+ignoreList = createIgnoreFile()
 
 makeCommit(makeTrees(os.curdir)[1], 'x', 'Super Cool Test Commit')
-readCommit(checkLatestCommit())
+unpackTree(readCommit(checkLatestCommit())["TreeHash"])
 
 
 #DATA LIST:
