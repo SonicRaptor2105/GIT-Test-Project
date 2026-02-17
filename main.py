@@ -57,8 +57,10 @@ def compressSave(header, finalBlob):
 
 #WIP
 def makeCommit(treeHash, author, comment):
+    while " " in author:
+        author = author.replace(" ", "_") #Ensuring no spaces in the Authors Name
     previousCommit = "" if checkLatestCommit() == None else checkLatestCommit()
-    data = " ".join([previousCommit, treeHash, author, datetime.now(timezone.utc).strftime("%d/%m/%y %H:%M+00:00"), comment]).encode("utf-8")
+    data = " ".join([previousCommit, treeHash, author, datetime.now(timezone.utc).strftime("%d/%m/%y-%H:%M+00:00"), comment]).encode("utf-8")
     header = f"3 {len(data)}\0".encode("utf-8")
     commitHash = compressSave(header, data)
     with open(f"{os.curdir}/.xgit/cache", "wb") as f: f.write(commitHash.encode("utf-8"))
@@ -82,7 +84,6 @@ def checkLatestCommit():
     with open(f"{os.curdir}/.xgit/cache", "rb") as f:
         data = f.read().decode("utf-8")
     if len(data) == 40:
-        print("true")
         return data
     else:
         print(" - Cache has been modified or corrupted. Regenerating")
@@ -108,6 +109,16 @@ def orderCommitList(commits): #WIP Needs error checking still
                 break
     return(finalOrder)
 
+def readCommit(commit):
+    path = f"{os.curdir}/.xgit/{commit[:2]}/{commit}"
+    if os.path.exists(path):
+        with open(f"{os.curdir}/.xgit/{commit[:2]}/{commit}", "rb") as f: d = f.read()
+        header, rawData = (zlib.decompress(d)).split(b"\0") #Split the file into header and data
+        keys = ["PreviousCommitHash", "TreeHash", "Author", "DateTime", "Comment"]
+        data = rawData.decode("utf-8").split(" ", 4)
+        commitUnpacked = dict(zip(keys, data))
+        return(commitUnpacked)
+    return
 
 
 
@@ -119,8 +130,8 @@ except OSError:
     print(" - Regenerating ignore.dat")
     ignoreList = createIgnoreFile()
 
-makeCommit(makeTrees(os.curdir)[1], 'x', 'Test Commit')
-
+makeCommit(makeTrees(os.curdir)[1], 'x', 'Super Cool Test Commit')
+readCommit(checkLatestCommit())
 
 
 #DATA LIST:
