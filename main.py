@@ -128,10 +128,26 @@ def readCommit(commit):
         return(commitUnpacked)
     return
 
-def unpackTree(treeHash):
-    _, rawData = splitContent(treeHash) #Take only the tree content and ignore the header
-    rawData = rawData.split("\x00")
-    print(rawData)
+def unpackTree(treeHash, folderName = None):
+    _, treeData = splitContent(treeHash) #Take only the tree content and ignore the header
+    treeData = [s.split(" ") for s in treeData.split("\x00")] #rawData is now a 2d list in the structure [[dataType, fileHash, fileName], ...]
+    print(treeData)
+    for file in treeData:
+        if file[0] == '10': #If the instance is a folder
+            unpackTree(file[1], f"{f"{folderName}/" if folderName != None else ""}{file[2]}") #Unpack the subfolder if it exists while accounting for already being in a subfolder
+        else:
+            os.makedirs(f"{os.curdir}/.xgit/TEST{f"/{folderName}" if folderName != None else ""}", exist_ok=True)
+            #Fails if there is no file in the folder
+            if file != [""]: #If theres data in the folder
+                _, blobData = splitContent(file[1]) #Take only the blob contnet and leave the header
+                with open(f"{os.curdir}/.xgit/TEST/{f"{folderName}/" if folderName != None else ""}{file[2]}", "wb") as f: f.write(blobData.encode("utf-8"))
+            
+
+                
+
+
+
+
 
 
 
