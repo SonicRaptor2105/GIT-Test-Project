@@ -30,21 +30,21 @@ def createIgnoreFile(dir):
     with open(f"{dir}/.xgit/ignore.dat", 'w') as f: f.write('\n'.join(ignoreList))
     return ignoreList
 
-def makeTrees(directory):
+def makeTrees(dir, directory): #Dir = parent directory, Directory = directory being converted to blobs
     blobs = list()
     with os.scandir(directory) as files: #Scan all folders and subfolders in a directory and save that snapshot as BLOBs and TREEs
         for file in files:
             if file.is_file() and not file.name in ignoreList:
-                with open(file, 'rb') as fileObj:
-                    blobs.append(blobFile(directory, fileObj))
+                with open(file.path, 'rb') as fileObj:
+                    blobs.append(blobFile(dir, fileObj))
             elif file.is_dir() and not file.name in ignoreList:
-                blobs.append(makeTrees(file.path))
+                blobs.append(makeTrees(dir, file.path))
     finalTree = list()
     for x in blobs:
         finalTree.append(" ".join(map(str, x)))
     finalTreeConcat = ("\x00".join((finalTree))).encode("utf-8")
     header = f"2 {len(finalTreeConcat)}\0".encode("utf-8")
-    finalHash = compressSave(directory, header, finalTreeConcat)
+    finalHash = compressSave(dir, header, finalTreeConcat)
     try:
         fileName = directory.rsplit("\\", 1)[1]
     except: #Parent directory
@@ -153,8 +153,9 @@ if __name__ == "__main__":
         print(" - Path is invalid")
     createGit(path)
     ignoreList = createIgnoreFile(path)
-    makeCommit(path, makeTrees(path)[1], 'x', 'Super Cool Test Commit')
-    unpackTree(path, "4ee97fcf46b5f12c40380d4af0f9561921c070e3")
+    makeCommit(path, makeTrees(path, path)[1], 'x', 'Super Cool Test Commit')
+    input("CHANGE FILES")
+    unpackTree(path, readCommit(path, checkLatestCommit(path))["TreeHash"])
 
 
 #DATA LIST:
