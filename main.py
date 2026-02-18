@@ -2,6 +2,7 @@ import os
 import ctypes
 import hashlib
 import zlib
+import re
 from datetime import datetime, timezone
 
 def createGit(dir):
@@ -21,7 +22,7 @@ def blobFile(dir, f):
     finalHash = compressSave(dir, header, data)
     return (dataType, finalHash, os.path.basename(f.name)) #Returns data needed for a tree
 
-def createIgnoreFile(dir):
+def checkIgnoreFile(dir):
     try:
         with open(f"{dir}/.xgit/ignore.dat", 'r') as f: ignoreList = f.read().split("\n") #Check if the ignore.dat file exists
     except OSError:
@@ -30,7 +31,7 @@ def createIgnoreFile(dir):
     with open(f"{dir}/.xgit/ignore.dat", 'w') as f: f.write('\n'.join(ignoreList))
     return ignoreList
 
-def makeTrees(dir, directory): #Dir = parent directory, Directory = directory being converted to blobs
+def makeTrees(dir, directory, ignoreList): #Dir = parent directory, Directory = directory being converted to blobs
     blobs = list()
     with os.scandir(directory) as files: #Scan all folders and subfolders in a directory and save that snapshot as BLOBs and TREEs
         for file in files:
@@ -38,7 +39,7 @@ def makeTrees(dir, directory): #Dir = parent directory, Directory = directory be
                 with open(file.path, 'rb') as fileObj:
                     blobs.append(blobFile(dir, fileObj))
             elif file.is_dir() and not file.name in ignoreList:
-                blobs.append(makeTrees(dir, file.path))
+                blobs.append(makeTrees(dir, file.path, ignoreList))
     finalTree = list()
     for x in blobs:
         finalTree.append(" ".join(map(str, x)))
@@ -46,7 +47,7 @@ def makeTrees(dir, directory): #Dir = parent directory, Directory = directory be
     header = f"2 {len(finalTreeConcat)}\0".encode("utf-8")
     finalHash = compressSave(dir, header, finalTreeConcat)
     try:
-        fileName = directory.rsplit("\\", 1)[1]
+        fileName = os.path.basename(directory)
     except: #Parent directory
         fileName = "."
     return (10, finalHash, fileName) #Returns data needed for a tree to link to a new tree
@@ -69,19 +70,23 @@ def makeCommit(dir, treeHash, author, comment):
     commitHash = compressSave(dir, header, data)
     with open(f"{dir}/.xgit/cache", "wb") as f: f.write(commitHash.encode("utf-8")) #Create cache if it doesn't exist and record the hash of the latest commit to save time finding it in the future
 
+def getAllCommitsWithPriorCommitHash(dir):
+    commits = list()
+    with os.scandir(f"{dir}/.xgit/") as folders:
+        for files in folders:
+            if files.is_dir():
+                for f in os.scandir(files): #Checking the contents of each hash folder
+                    with open(f, "rb") as d:
+                        data = zlib.decompress(d.read()).split(b"\0") #Decompress and split into header [0] and data [1]
+                        if data[0][0] == ord("3"): #Checking if the type is commit by checking the first byte
+                            commits.append({f.name : data[1].decode("utf-8").partition(" ")[0]}) #Decode the data and seperate the previous hash from the data then return the Commits Hash : Previous Commits Hash
+    return(commits)
+
 def checkLatestCommit(dir):
     if not os.path.exists(f"{dir}/.xgit/cache"): #First check if the cache exists and use that before attempting to find the latest commit by reading files
-        commits = list()
         if not os.path.exists(f"{dir}/.xgit"):
             return #First commit
-        with os.scandir(f"{dir}/.xgit/") as folders:
-            for files in folders:
-                if files.is_dir():
-                    for f in os.scandir(files): #Checking the contents of each hash folder
-                        with open(f, "rb") as d:
-                            data = zlib.decompress(d.read()).split(b"\0") #Decompress and split into header [0] and data [1]
-                            if data[0][0] == ord("3"): #Checking if the type is commit by checking the first byte
-                                commits.append({f.name : data[1].decode("utf-8").partition(" ")[0]}) #Decode the data and seperate the previous hash from the data then return the Commits Hash : Previous Commits Hash
+        commits = getAllCommitsWithPriorCommitHash(dir)
         if len(commits) == 0:
             return #Initial commit
         return orderCommitList(commits)[0] #Return most recent commit in the list
@@ -131,7 +136,6 @@ def readCommit(dir, commit):
 def unpackTree(dir, treeHash, folderName = None):
     _, treeData = splitContent(dir, treeHash) #Take only the tree content and ignore the header
     treeData = [s.split(" ") for s in treeData.decode("utf-8").split("\x00")] #rawData is now a 2d list in the structure [[dataType, fileHash, fileName], ...]
-    print(treeData)
     for file in treeData:
         if file[0] == '10': #If the instance is a folder
             unpackTree(dir, file[1], f"{f"{folderName}/" if folderName != None else ""}{file[2]}") #Unpack the subfolder if it exists while accounting for already being in a subfolder
@@ -145,18 +149,42 @@ def unpackTree(dir, treeHash, folderName = None):
 
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": #Run commands to call functions through CLI if the program is started by itself
     while True:
-        path = input("Path to parent directory: ")
-        if os.path.exists(path):
+        dir = input("Path to selected directory: ")
+        if os.path.exists(dir):
             break
         print(" - Path is invalid")
-    createGit(path)
-    ignoreList = createIgnoreFile(path)
-    makeCommit(path, makeTrees(path, path)[1], 'x', 'Super Cool Test Commit')
-    input("CHANGE FILES")
-    unpackTree(path, readCommit(path, checkLatestCommit(path))["TreeHash"])
-
+    print(f" - Directory path set to {dir}")
+    createGit(dir)
+    ignoreList = checkIgnoreFile(dir)
+    while True:
+        command = input("")
+        match command.lower():
+            case "commit":
+                a = input("   Author: ").replace(" ", "_") #Author cannot have spaces so automatically replace with _
+                m = input("   Message: ")
+                makeCommit(dir, makeTrees(dir, dir, ignoreList)[1], a, m)
+                print(f" - Commit {checkLatestCommit(dir)} completed successfully")
+            case "load":
+                h = re.sub(r"[\/.]", " ", input("   Commit Hash: ")) #Filter out chars that will break by opening folders. These should not be in a hash anyway so replace with " " to invalidate the input
+                if readCommit(dir, h) != None:
+                    unpackTree(dir, readCommit(dir, h)["TreeHash"]) #Loads a commit into the directory by decompressing it
+                    print(" - Commit successfully loaded")
+                else:
+                    print(" - Commit object not found")
+            case "latestcommit" | "latest":
+                print(" - No commits in selected directory") if checkLatestCommit(dir) is None else [print(f" - {k}: {v}") for k, v in readCommit(dir, checkLatestCommit(dir)).items()] #Either print no commits or print the latest commit properties on new lines
+            case "readcommit" | "read":
+                h = re.sub(r"[\/.]", " ", input("   Commit Hash: ")) #Filter out chars that will break by opening folders. These should not be in a hash anyway so replace with " " to invalidate the input
+                print(" - No commit found by that hash") if readCommit(dir, h) is None else [print(f" - {k}: {v}") for k, v in readCommit(dir, h).items()]
+            case "allcommits" | "all":
+                for n, h in enumerate(orderCommitList(getAllCommitsWithPriorCommitHash(dir))): print(f" - {len(orderCommitList(getAllCommitsWithPriorCommitHash(dir))) - n}: {h}") #For each hash in the list, print its position starting at 1 for the oldest (the one at the end)
+            case "help":
+                cmds = ["commit: Commits the selected directory", "load: Loads selected hash", "latestCommit: Returns the contents of the latest commit", "readCommit: Returns the contents of a commit", "allCommits: Returns all commit hashes in date order (Newest -> Oldest)"]
+                for c in cmds: print(f" - {c}") #Print each of the commands and what they do on a new line
+            case _:
+                print(" - Unknown command. Please enter 'help' for a list of all commands")
 
 #DATA LIST:
 #FILE TYPES:
