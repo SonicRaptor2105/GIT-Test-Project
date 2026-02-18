@@ -136,10 +136,10 @@ def unpackTree(dir, treeHash, folderName = None):
         if file[0] == '10': #If the instance is a folder
             unpackTree(dir, file[1], f"{f"{folderName}/" if folderName != None else ""}{file[2]}") #Unpack the subfolder if it exists while accounting for already being in a subfolder
         else:
-            os.makedirs(f"{dir}/.xgit/TEST{f"/{folderName}" if folderName != None else ""}", exist_ok=True)
+            os.makedirs(f"{dir}{f"/{folderName}" if folderName != None else ""}", exist_ok=True)
             if file != [""]: #If theres data in the folder create it otherwise skip
                 _, blobData = splitContent(dir, file[1]) #Take only the blob contnet and leave the header
-                with open(f"{dir}/.xgit/TEST/{f"{folderName}/" if folderName != None else ""}{file[2]}", "wb") as f: f.write(blobData)
+                with open(f"{dir}/{f"{folderName}/" if folderName != None else ""}{file[2]}", "wb") as f: f.write(blobData)
 
 
 
@@ -154,7 +154,7 @@ if __name__ == "__main__":
     createGit(path)
     ignoreList = createIgnoreFile(path)
     makeCommit(path, makeTrees(path)[1], 'x', 'Super Cool Test Commit')
-    unpackTree(path, readCommit(path, checkLatestCommit(path))["TreeHash"])
+    unpackTree(path, "4ee97fcf46b5f12c40380d4af0f9561921c070e3")
 
 
 #DATA LIST:
