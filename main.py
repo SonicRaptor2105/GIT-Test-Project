@@ -4,8 +4,8 @@ import hashlib
 import zlib
 from datetime import datetime, timezone
 
-def createGit():
-    directory = f"{os.curdir}/.xgit"
+def createGit(dir):
+    directory = f"{dir}/.xgit"
     if not os.path.isdir(directory):
         os.mkdir(directory)
         print(f" - Directory created at {directory}")
@@ -21,13 +21,13 @@ def blobFile(f):
     finalHash = compressSave(header, data)
     return (dataType, finalHash, os.path.basename(f.name)) #Returns data needed for a tree
 
-def createIgnoreFile():
+def createIgnoreFile(dir):
     try:
-        with open(f"{os.curdir}/.xgit/ignore.dat", 'r') as f: ignoreList = f.read().split("\n") #Check if the ignore.dat file exists
+        with open(f"{dir}/.xgit/ignore.dat", 'r') as f: ignoreList = f.read().split("\n") #Check if the ignore.dat file exists
     except OSError:
         print(" - Regenerating ignore.dat")
     ignoreList = [".xgit", ".git"] #Default ignored files
-    with open(f"{os.curdir}/.xgit/ignore.dat", 'w') as f: f.write('\n'.join(ignoreList))
+    with open(f"{dir}/.xgit/ignore.dat", 'w') as f: f.write('\n'.join(ignoreList))
     return ignoreList
 
 def makeTrees(directory):
@@ -51,30 +51,30 @@ def makeTrees(directory):
         fileName = "."
     return (10, finalHash, fileName) #Returns data needed for a tree to link to a new tree
 
-def compressSave(header, finalBlob):
+def compressSave(dir, header, finalBlob):
     finalData = zlib.compress(header + finalBlob) #Compress the header and data into 1 compressed file
     finalHash = hashlib.sha1(finalData).hexdigest() #Take the hash of the compressed contents
-    os.makedirs(f"{os.curdir}/.xgit/{finalHash[:2]}", exist_ok=True) #Make a directory with the first 2 characters of the hash
-    if not os.path.exists(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}"):
-        with open(f"{os.curdir}/.xgit/{finalHash[:2]}/{finalHash}", 'wb') as treeData: treeData.write(finalData)
+    os.makedirs(f"{dir}/.xgit/{finalHash[:2]}", exist_ok=True) #Make a directory with the first 2 characters of the hash
+    if not os.path.exists(f"{dir}/.xgit/{finalHash[:2]}/{finalHash}"):
+        with open(f"{dir}/.xgit/{finalHash[:2]}/{finalHash}", 'wb') as treeData: treeData.write(finalData)
     return finalHash #Returs the hash which is used for file linking in TREEs and COMMITs
 
 #WIP
-def makeCommit(treeHash, author, comment):
+def makeCommit(dir, treeHash, author, comment):
     while " " in author:
         author = author.replace(" ", "_") #Ensuring no spaces in the authors name
     previousCommit = "" if checkLatestCommit() == None else checkLatestCommit() #Check if this is the first commit or if not what the previous commit hash was
     data = " ".join([previousCommit, treeHash, author, datetime.now(timezone.utc).strftime("%d/%m/%y-%H:%M+00:00"), comment]).encode("utf-8")
     header = f"3 {len(data)}\0".encode("utf-8")
     commitHash = compressSave(header, data)
-    with open(f"{os.curdir}/.xgit/cache", "wb") as f: f.write(commitHash.encode("utf-8")) #Create cache if it doesn't exist and record the hash of the latest commit to save time finding it in the future
+    with open(f"{dir}/.xgit/cache", "wb") as f: f.write(commitHash.encode("utf-8")) #Create cache if it doesn't exist and record the hash of the latest commit to save time finding it in the future
 
-def checkLatestCommit():
-    if not os.path.exists(f"{os.curdir}/.xgit/cache"): #First check if the cache exists and use that before attempting to find the latest commit by reading files
+def checkLatestCommit(dir):
+    if not os.path.exists(f"{dir}/.xgit/cache"): #First check if the cache exists and use that before attempting to find the latest commit by reading files
         commits = list()
-        if not os.path.exists(f"{os.curdir}/.xgit"):
+        if not os.path.exists(f"{dir}/.xgit"):
             return #First commit
-        with os.scandir(f"{os.curdir}/.xgit/") as folders:
+        with os.scandir(f"{dir}/.xgit/") as folders:
             for files in folders:
                 if files.is_dir():
                     for f in os.scandir(files): #Checking the contents of each hash folder
@@ -85,13 +85,13 @@ def checkLatestCommit():
         if len(commits) == 0:
             return #Initial commit
         return orderCommitList(commits)[0] #Return most recent commit in the list
-    with open(f"{os.curdir}/.xgit/cache", "rb") as f:
+    with open(f"{dir}/.xgit/cache", "rb") as f:
         data = f.read().decode("utf-8")
     if len(data) == 40:
         return data
     else: #If the hash is invalid reject it and find it using the above method
         print(" - Cache has been modified or corrupted")
-        os.remove(f"{os.curdir}/.xgit/cache") #Delete the cache so it isn't checked again until it is recreated with the next commit
+        os.remove(f"{dir}/.xgit/cache") #Delete the cache so it isn't checked again until it is recreated with the next commit
         return checkLatestCommit() #Rerun without checking cache
 
 def orderCommitList(commits): #WIP Needs error checking still
@@ -113,43 +113,49 @@ def orderCommitList(commits): #WIP Needs error checking still
                 break
     return(finalOrder) #Returns a list of hashes that correlate to commit files, in order of newest to oldest
 
-def splitContent(hash):
-    with open(f"{os.curdir}/.xgit/{hash[:2]}/{hash}", "rb") as f: d = f.read()
+def splitContent(dir, hash):
+    with open(f"{dir}/.xgit/{hash[:2]}/{hash}", "rb") as f: d = f.read()
     header, rawData = (zlib.decompress(d)).split(b"\0", 1) #Split the file into header and data
-    return header.decode('utf-8'), rawData.decode("utf-8") #Return both header and content decoded
+    return header.decode('utf-8'), rawData #Return both header and content. Content is not decoded here incase it is a non utf-8 file like a .png
 
-def readCommit(commit):
-    path = f"{os.curdir}/.xgit/{commit[:2]}/{commit}"
+def readCommit(dir, commit):
+    path = f"{dir}/.xgit/{commit[:2]}/{commit}"
     if os.path.exists(path):
         _, rawData = splitContent(commit) #Take the data and ignore the header
         keys = ["PreviousCommitHash", "TreeHash", "Author", "DateTime", "Comment"]
-        data = rawData.split(" ", 4)
+        data = rawData.decode("utf-8").split(" ", 4)
         commitUnpacked = dict(zip(keys, data)) #Pack the data into a more human readable dict form
         return(commitUnpacked)
     return
 
-def unpackTree(treeHash, folderName = None):
+def unpackTree(dir, treeHash, folderName = None):
     _, treeData = splitContent(treeHash) #Take only the tree content and ignore the header
-    treeData = [s.split(" ") for s in treeData.split("\x00")] #rawData is now a 2d list in the structure [[dataType, fileHash, fileName], ...]
+    treeData = [s.split(" ") for s in treeData.decode("utf-8").split("\x00")] #rawData is now a 2d list in the structure [[dataType, fileHash, fileName], ...]
     print(treeData)
     for file in treeData:
         if file[0] == '10': #If the instance is a folder
             unpackTree(file[1], f"{f"{folderName}/" if folderName != None else ""}{file[2]}") #Unpack the subfolder if it exists while accounting for already being in a subfolder
         else:
-            os.makedirs(f"{os.curdir}/.xgit/TEST{f"/{folderName}" if folderName != None else ""}", exist_ok=True)
+            os.makedirs(f"{dir}/.xgit/TEST{f"/{folderName}" if folderName != None else ""}", exist_ok=True)
             if file != [""]: #If theres data in the folder create it otherwise skip
                 _, blobData = splitContent(file[1]) #Take only the blob contnet and leave the header
-                with open(f"{os.curdir}/.xgit/TEST/{f"{folderName}/" if folderName != None else ""}{file[2]}", "wb") as f: f.write(blobData.encode("utf-8"))
+                with open(f"{dir}/.xgit/TEST/{f"{folderName}/" if folderName != None else ""}{file[2]}", "wb") as f: f.write(blobData)
 
 
 
 
 
-createGit()
-ignoreList = createIgnoreFile()
-
-makeCommit(makeTrees(os.curdir)[1], 'x', 'Super Cool Test Commit')
-unpackTree(readCommit(checkLatestCommit())["TreeHash"])
+if __name__ == "__main__":
+    while True:
+        path = input("Path to parent directory: ")
+        if os.path.exists(path):
+            break
+        print(" - Path is invalid")
+    input("")
+    createGit()
+    ignoreList = createIgnoreFile()
+    makeCommit(makeTrees(os.curdir)[1], 'x', 'Super Cool Test Commit')
+    unpackTree(readCommit(checkLatestCommit())["TreeHash"])
 
 
 #DATA LIST:
