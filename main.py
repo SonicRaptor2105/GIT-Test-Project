@@ -13,12 +13,12 @@ def createGit(dir):
             ctypes.windll.kernel32.SetFileAttributesW(directory, 0x02) #Marks the folder as hidden on windows
     return
 
-def blobFile(f):
+def blobFile(dir, f):
     data = f.read()
     header = f"1 {len(data)}\0".encode('utf-8') #Creates header of file type (1 for BLOB) and length of data stored
     dataType = 0
     dataType = 2 if os.access(f.name, os.X_OK) else 1 #Set to 2 if its executable else set to 1
-    finalHash = compressSave(header, data)
+    finalHash = compressSave(dir, header, data)
     return (dataType, finalHash, os.path.basename(f.name)) #Returns data needed for a tree
 
 def createIgnoreFile(dir):
@@ -36,7 +36,7 @@ def makeTrees(directory):
         for file in files:
             if file.is_file() and not file.name in ignoreList:
                 with open(file, 'rb') as fileObj:
-                    blobs.append(blobFile(fileObj))
+                    blobs.append(blobFile(directory, fileObj))
             elif file.is_dir() and not file.name in ignoreList:
                 blobs.append(makeTrees(file.path))
     finalTree = list()
@@ -44,7 +44,7 @@ def makeTrees(directory):
         finalTree.append(" ".join(map(str, x)))
     finalTreeConcat = ("\x00".join((finalTree))).encode("utf-8")
     header = f"2 {len(finalTreeConcat)}\0".encode("utf-8")
-    finalHash = compressSave(header, finalTreeConcat)
+    finalHash = compressSave(directory, header, finalTreeConcat)
     try:
         fileName = directory.rsplit("\\", 1)[1]
     except: #Parent directory
@@ -63,10 +63,10 @@ def compressSave(dir, header, finalBlob):
 def makeCommit(dir, treeHash, author, comment):
     while " " in author:
         author = author.replace(" ", "_") #Ensuring no spaces in the authors name
-    previousCommit = "" if checkLatestCommit() == None else checkLatestCommit() #Check if this is the first commit or if not what the previous commit hash was
+    previousCommit = "" if checkLatestCommit(dir) == None else checkLatestCommit(dir) #Check if this is the first commit or if not what the previous commit hash was
     data = " ".join([previousCommit, treeHash, author, datetime.now(timezone.utc).strftime("%d/%m/%y-%H:%M+00:00"), comment]).encode("utf-8")
     header = f"3 {len(data)}\0".encode("utf-8")
-    commitHash = compressSave(header, data)
+    commitHash = compressSave(dir, header, data)
     with open(f"{dir}/.xgit/cache", "wb") as f: f.write(commitHash.encode("utf-8")) #Create cache if it doesn't exist and record the hash of the latest commit to save time finding it in the future
 
 def checkLatestCommit(dir):
@@ -92,7 +92,7 @@ def checkLatestCommit(dir):
     else: #If the hash is invalid reject it and find it using the above method
         print(" - Cache has been modified or corrupted")
         os.remove(f"{dir}/.xgit/cache") #Delete the cache so it isn't checked again until it is recreated with the next commit
-        return checkLatestCommit() #Rerun without checking cache
+        return checkLatestCommit(dir) #Rerun without checking cache
 
 def orderCommitList(commits): #WIP Needs error checking still
     finalOrder = list()
@@ -121,7 +121,7 @@ def splitContent(dir, hash):
 def readCommit(dir, commit):
     path = f"{dir}/.xgit/{commit[:2]}/{commit}"
     if os.path.exists(path):
-        _, rawData = splitContent(commit) #Take the data and ignore the header
+        _, rawData = splitContent(dir, commit) #Take the data and ignore the header
         keys = ["PreviousCommitHash", "TreeHash", "Author", "DateTime", "Comment"]
         data = rawData.decode("utf-8").split(" ", 4)
         commitUnpacked = dict(zip(keys, data)) #Pack the data into a more human readable dict form
@@ -129,16 +129,16 @@ def readCommit(dir, commit):
     return
 
 def unpackTree(dir, treeHash, folderName = None):
-    _, treeData = splitContent(treeHash) #Take only the tree content and ignore the header
+    _, treeData = splitContent(dir, treeHash) #Take only the tree content and ignore the header
     treeData = [s.split(" ") for s in treeData.decode("utf-8").split("\x00")] #rawData is now a 2d list in the structure [[dataType, fileHash, fileName], ...]
     print(treeData)
     for file in treeData:
         if file[0] == '10': #If the instance is a folder
-            unpackTree(file[1], f"{f"{folderName}/" if folderName != None else ""}{file[2]}") #Unpack the subfolder if it exists while accounting for already being in a subfolder
+            unpackTree(dir, file[1], f"{f"{folderName}/" if folderName != None else ""}{file[2]}") #Unpack the subfolder if it exists while accounting for already being in a subfolder
         else:
             os.makedirs(f"{dir}/.xgit/TEST{f"/{folderName}" if folderName != None else ""}", exist_ok=True)
             if file != [""]: #If theres data in the folder create it otherwise skip
-                _, blobData = splitContent(file[1]) #Take only the blob contnet and leave the header
+                _, blobData = splitContent(dir, file[1]) #Take only the blob contnet and leave the header
                 with open(f"{dir}/.xgit/TEST/{f"{folderName}/" if folderName != None else ""}{file[2]}", "wb") as f: f.write(blobData)
 
 
@@ -151,11 +151,10 @@ if __name__ == "__main__":
         if os.path.exists(path):
             break
         print(" - Path is invalid")
-    input("")
-    createGit()
-    ignoreList = createIgnoreFile()
-    makeCommit(makeTrees(os.curdir)[1], 'x', 'Super Cool Test Commit')
-    unpackTree(readCommit(checkLatestCommit())["TreeHash"])
+    createGit(path)
+    ignoreList = createIgnoreFile(path)
+    makeCommit(path, makeTrees(path)[1], 'x', 'Super Cool Test Commit')
+    unpackTree(path, readCommit(path, checkLatestCommit(path))["TreeHash"])
 
 
 #DATA LIST:
