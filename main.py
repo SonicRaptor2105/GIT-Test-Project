@@ -135,7 +135,7 @@ def readCommit(dir, commit):
 
 def unpackTree(dir, treeHash, folderName = None):
     _, treeData = splitContent(dir, treeHash) #Take only the tree content and ignore the header
-    treeData = [s.split(" ") for s in treeData.decode("utf-8").split("\x00")] #rawData is now a 2d list in the structure [[dataType, fileHash, fileName], ...]
+    treeData = [s.split(" ", 2) for s in treeData.decode("utf-8").split("\x00")] #rawData is now a 2d list in the structure [[dataType, fileHash, fileName], ...]
     for file in treeData:
         if file[0] == '10': #If the instance is a folder
             unpackTree(dir, file[1], f"{f"{folderName}/" if folderName != None else ""}{file[2]}") #Unpack the subfolder if it exists while accounting for already being in a subfolder
